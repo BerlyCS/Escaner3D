@@ -40,3 +40,6 @@ private:
     void genNrm(Grp& g);
     void fit();
 };
+
+GLuint loadTex(const char* path);
+void freeTex(GLuint id);

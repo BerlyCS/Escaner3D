@@ -1,10 +1,46 @@
-#include "model.h"
-#include "texture.h"
+#include "visor.h"
 #include <cstdio>
 #include <cstring>
 #include <cmath>
 #include <algorithm>
 #include <map>
+#include <GL/glu.h>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "visor/stb_image.h"
+
+GLuint loadTex(const char* path) {
+    stbi_set_flip_vertically_on_load(1);
+    int w, h, n;
+    unsigned char* dat = stbi_load(path, &w, &h, &n, 0);
+    if (!dat) {
+        fprintf(stderr, "Failed to load texture: %s\n", path);
+        return 0;
+    }
+
+    GLint intern = (n == 4) ? GL_RGBA : GL_RGB;
+    GLenum fmt   = (n == 4) ? GL_RGBA : GL_RGB;
+
+    GLuint id;
+    glGenTextures(1, &id);
+    glBindTexture(GL_TEXTURE_2D, id);
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    gluBuild2DMipmaps(GL_TEXTURE_2D, intern, w, h, fmt, GL_UNSIGNED_BYTE, dat);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+    stbi_image_free(dat);
+    return id;
+}
+
+void freeTex(GLuint id) {
+    if (id) glDeleteTextures(1, &id);
+}
 
 struct V3 { float x, y, z; };
 struct V2 { float u, v; };
@@ -87,7 +123,6 @@ bool Model::load(const char* path, const char* mtlPath) {
         objDir[len] = '\0';
     }
 
-    // Load explicit MTL before parsing OBJ
     if (mtlPath && mtlPath[0])
         readMtl(mtlPath, objDir);
 

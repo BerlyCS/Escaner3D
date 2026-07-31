@@ -3,9 +3,12 @@
 #include <GL/glut.h>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
+#include <iostream>
 #include <string>
 #include <vector>
+#include "visor.h"
 
 using namespace std;
 void save_scene();
@@ -20,7 +23,7 @@ struct col3 {
   col3(float r = 1, float g = 1, float b = 1) : r(r), g(g), b(b) {}
 };
 
-enum obj_t { CUBE, SPHERE, TORUS, TEAPOT };
+enum obj_t { CUBE, SPHERE, TORUS, TEAPOT, OBJMESH };
 
 struct obj {
   obj_t type;
@@ -29,7 +32,17 @@ struct obj {
   col3 col;
   bool sel = false;
   bool wire = false;
+  string objPath, mtlPath;
+  Model* model = nullptr;
   obj(obj_t t, vec3 p, col3 c) : type(t), pos(p), col(c) {}
+  ~obj() { if (model) { delete model; model = nullptr; } }
+  bool loadMesh() {
+    if (type != OBJMESH) return false;
+    if (model) { delete model; model = nullptr; }
+    model = new Model();
+    return model->load(objPath.c_str(),
+                       mtlPath.empty() ? nullptr : mtlPath.c_str());
+  }
 };
 
 vector<obj *> objs;
@@ -127,6 +140,13 @@ void draw_obj(obj *o) {
     case TEAPOT:
       glutWireTeapot(.65f);
       break;
+    case OBJMESH:
+      if (o->model) {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        o->model->render();
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+      }
+      break;
     }
   } else {
     glEnable(GL_LIGHTING);
@@ -142,6 +162,9 @@ void draw_obj(obj *o) {
       break;
     case TEAPOT:
       glutSolidTeapot(.63f);
+      break;
+    case OBJMESH:
+      if (o->model) o->model->render();
       break;
     }
     // overline , selected object
@@ -160,6 +183,16 @@ void draw_obj(obj *o) {
         break;
       case TEAPOT:
         glutWireTeapot(.64f);
+        break;
+      case OBJMESH:
+        if (o->model) {
+          glEnable(GL_POLYGON_OFFSET_LINE);
+          glPolygonOffset(-1, -1);
+          glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+          o->model->render();
+          glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+          glDisable(GL_POLYGON_OFFSET_LINE);
+        }
         break;
       }
     }
@@ -195,8 +228,8 @@ void draw_hud() {
   glVertex2f(0, 50);
   glEnd();
   draw_str(8, 34,
-           "1:Cube  2:Sphere  3:Torus  4:Teapot    Tab:select  W:wire  "
-           "Del:delete WASDTY:moveCam",
+           "1:Cube  2:Sphere  3:Torus  4:Teapot  5:LoadOBJ  Tab:select  "
+           "W:wire  Del:delete WASDTY:moveCam",
            {.75f, .75f, .75f});
   draw_str(8, 14,
            ("IJKLNM:move  UO:rotY  PR:rotZ  +/-:scale  VB:FOV=" +
@@ -207,7 +240,7 @@ void draw_hud() {
 
   if (sel_idx >= 0 && sel_idx < (int)objs.size()) {
     obj *o = objs[sel_idx];
-    const char *tnames[] = {"Cubo", "Esfera", "Toro", "Tetera"};
+    const char *tnames[] = {"Cubo", "Esfera", "Toro", "Tetera", "Malla"};
     char buf[200];
     sprintf(buf,
             "obj[%d] %s  |  pos(%.2f, %.2f, %.2f)  |  rot(%.0f, %.0f, %.0f)  | "
@@ -284,6 +317,52 @@ void keyboard(unsigned char key, int x, int y) {
   case '4':
     objs.push_back(new obj(TEAPOT, {0, .5f, 0}, pal[pi]));
     break;
+
+  case '5': {
+    string op;
+    printf("Ruta del archivo .obj: ");
+    fflush(stdout);
+    getline(cin, op);
+    if (op.empty()) break;
+
+    string mp;
+    size_t dot = op.rfind('.');
+    if (dot != string::npos)
+      mp = op.substr(0, dot) + ".mtl";
+    else
+      mp = op + ".mtl";
+
+    ifstream test(mp);
+    bool mtlExiste = test.good();
+    test.close();
+
+    if (mtlExiste) {
+      printf("Se encontro %s. Usar MTL? (s/n): ", mp.c_str());
+      fflush(stdout);
+      string resp;
+      getline(cin, resp);
+      if (resp != "s" && resp != "S" && resp != "si" && resp != "SI" && resp != "y" && resp != "Y")
+        mp.clear();
+    } else {
+      printf("No se encontro %s, cargando sin texturas.\n", mp.c_str());
+      fflush(stdout);
+      mp.clear();
+    }
+
+    obj* o = new obj(OBJMESH, {0, 0, 0}, pal[pi]);
+    o->objPath = op;
+    o->mtlPath = mp;
+    if (!o->loadMesh()) {
+      printf("Error al cargar el modelo\n");
+      fflush(stdout);
+      delete o;
+    } else {
+      objs.push_back(o);
+      printf("Modelo cargado: %s\n", op.c_str());
+      fflush(stdout);
+    }
+    break;
+  }
 
   case 9:
     if (!objs.empty()) {
@@ -423,6 +502,11 @@ void keyboard(unsigned char key, int x, int y) {
       clone->rot = s->rot;
       clone->scl = s->scl;
       clone->wire = s->wire;
+      if (s->type == OBJMESH) {
+        clone->objPath = s->objPath;
+        clone->mtlPath = s->mtlPath;
+        clone->loadMesh();
+      }
       objs.push_back(clone);
       s = clone;
     }
@@ -505,10 +589,18 @@ int main(int argc, char **argv) {
   glEnable(GL_DEPTH_TEST);
   glEnable(GL_LIGHTING);
   glEnable(GL_LIGHT0);
+  glEnable(GL_NORMALIZE);
   glEnable(GL_COLOR_MATERIAL);
   glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE);
+  glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE);
   GLfloat amb[] = {.3f, .3f, .3f, 1};
   glLightModelfv(GL_LIGHT_MODEL_AMBIENT, amb);
+  GLfloat la[] = {0.4f, 0.4f, 0.4f, 1.0f};
+  GLfloat dif[] = {0.8f, 0.8f, 0.8f, 1.0f};
+  GLfloat spe[] = {0.2f, 0.2f, 0.2f, 1.0f};
+  glLightfv(GL_LIGHT0, GL_AMBIENT, la);
+  glLightfv(GL_LIGHT0, GL_DIFFUSE, dif);
+  glLightfv(GL_LIGHT0, GL_SPECULAR, spe);
   glClearColor(0, 0, 0, 1);
   glPointSize(2);
   set_proj();
@@ -542,12 +634,19 @@ void save_scene() {
     case TEAPOT:
       file << "TEAPOT ";
       break;
+    case OBJMESH:
+      file << "OBJMESH ";
+      break;
     }
 
     file << o->pos.x << " " << o->pos.y << " " << o->pos.z << " " << o->rot.x
          << " " << o->rot.y << " " << o->rot.z << " " << o->scl << " "
-         << o->col.r << " " << o->col.g << " " << o->col.b << " " << o->wire
-         << "\n";
+         << o->col.r << " " << o->col.g << " " << o->col.b << " " << o->wire;
+    file << "\n";
+    if (o->type == OBJMESH) {
+      file << o->objPath << "\n";
+      file << o->mtlPath << "\n";
+    }
   }
 }
 
@@ -578,6 +677,8 @@ void load_scene(string filename) {
       type = TORUS;
     else if (type_str == "TEAPOT")
       type = TEAPOT;
+    else if (type_str == "OBJMESH")
+      type = OBJMESH;
     else {
       printf("Tipo desconocido: %s\n", type_str.c_str());
       continue;
@@ -586,8 +687,15 @@ void load_scene(string filename) {
     obj *o = new obj(type, {px, py, pz}, {r, g, b});
     o->rot = {rx, ry, rz};
     o->scl = scl;
-
     o->wire = ws;
+
+    if (type == OBJMESH) {
+      file.ignore(10000, '\n');
+      getline(file, o->objPath);
+      getline(file, o->mtlPath);
+      o->loadMesh();
+    }
+
     objs.push_back(o);
   }
 }
