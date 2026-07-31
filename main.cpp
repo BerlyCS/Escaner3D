@@ -142,6 +142,9 @@ void draw_obj(obj *o) {
       break;
     case OBJMESH:
       if (o->model) {
+        float cx, cy, cz;
+        o->model->getCenter(cx, cy, cz);
+        glTranslatef(-cx, -cy, -cz);
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         o->model->render();
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -164,7 +167,14 @@ void draw_obj(obj *o) {
       glutSolidTeapot(.63f);
       break;
     case OBJMESH:
-      if (o->model) o->model->render();
+      if (o->model) {
+        float cx, cy, cz;
+        o->model->getCenter(cx, cy, cz);
+        glTranslatef(-cx, -cy, -cz);
+        glDisable(GL_COLOR_MATERIAL);
+        o->model->render();
+        glEnable(GL_COLOR_MATERIAL);
+      }
       break;
     }
     // overline , selected object
@@ -186,6 +196,9 @@ void draw_obj(obj *o) {
         break;
       case OBJMESH:
         if (o->model) {
+          float cx, cy, cz;
+          o->model->getCenter(cx, cy, cz);
+          glTranslatef(-cx, -cy, -cz);
           glEnable(GL_POLYGON_OFFSET_LINE);
           glPolygonOffset(-1, -1);
           glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -357,8 +370,10 @@ void keyboard(unsigned char key, int x, int y) {
       fflush(stdout);
       delete o;
     } else {
+      float rad = o->model->getRad();
+      if (rad > 0.001f) o->scl = 1.0f / rad;
       objs.push_back(o);
-      printf("Modelo cargado: %s\n", op.c_str());
+      printf("Modelo cargado: %s  (radio=%.2f, escala=%.2f)\n", op.c_str(), rad, o->scl);
       fflush(stdout);
     }
     break;
