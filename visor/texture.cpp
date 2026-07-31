@@ -6,6 +6,7 @@
 #include "stb_image.h"
 
 GLuint loadTex(const char* path) {
+    stbi_set_flip_vertically_on_load(1);
     int w, h, n;
     unsigned char* dat = stbi_load(path, &w, &h, &n, 0);
     if (!dat) {
@@ -19,7 +20,10 @@ GLuint loadTex(const char* path) {
     GLuint id;
     glGenTextures(1, &id);
     glBindTexture(GL_TEXTURE_2D, id);
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     gluBuild2DMipmaps(GL_TEXTURE_2D, intern, w, h, fmt, GL_UNSIGNED_BYTE, dat);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
