@@ -195,17 +195,6 @@ void draw_obj(obj *o) {
         glutWireTeapot(.64f);
         break;
       case OBJMESH:
-        if (o->model) {
-          float cx, cy, cz;
-          o->model->getCenter(cx, cy, cz);
-          glTranslatef(-cx, -cy, -cz);
-          glEnable(GL_POLYGON_OFFSET_LINE);
-          glPolygonOffset(-1, -1);
-          glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-          o->model->render();
-          glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-          glDisable(GL_POLYGON_OFFSET_LINE);
-        }
         break;
       }
     }
